@@ -1,1 +1,1 @@
-the URL to my Rmd file for assignment 8 on github is:
+the URL to my Rmd file for assignment 8 on github is: https://github.com/efpelletier/csde502_week09/blob/main/csde502_2021_assignment09.Rmd

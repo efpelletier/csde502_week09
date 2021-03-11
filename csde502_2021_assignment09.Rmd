@@ -20,6 +20,9 @@ urlcolor: blue
 
 ```{r}
 library(captioner)
+library(haven)
+library(tidyverse)
+library(knitr)
 
 figure_nums <- captioner(prefix = "Figure")
 table_nums <- captioner(prefix = "Table")
@@ -43,28 +46,168 @@ ___Instructions___:
 #
 __Using the full household roster (you'll need to go back the full raw data source, [21600-0001-Data.dta](http://staff.washington.edu/phurvitz/csde502_winter_2021/data/21600-0001-Data.dta.zip)), create the following variables for each respondent. Document any decisions that you make regarding missing values, definitions, etc. in your narrative as well as in the R code.  Include a frequency tabulation and a histogram of each result.__
 
+```{r}
+# download file from URL; unzip and load
+tmp <- Sys.getenv("TMPDIR")
+
+download.file(
+  url="http://staff.washington.edu/phurvitz/csde502_winter_2021/data/21600-0001-Data.dta.zip",
+  destfile= file.path(tmp, "21600-0001-Data.dta.zip", fsep=""))
+
+ah <- read_dta(unz(file.path(tmp, "21600-0001-Data.dta.zip", fsep=""), filename="21600-0001-Data.dta"))
+
+```
 ##
 __Total number in household__
 
+I used the first question for each household member to count the number in the household. For each question, if participants marked a "7" for legitimate skip (they didn't have another member of their household), I did not add to the count. If participants did not mark 7, I added to the count of household members until they marked 7.
+
+```{r}
+
+hhmem <- ah %>%
+    select(AID, H1HR2A, H1HR2B, H1HR2C, H1HR2D, H1HR2E, 
+           H1HR2F, H1HR2G, H1HR2H, H1HR2I, H1HR2J, 
+           H1HR2K, H1HR2L, H1HR2M, H1HR2N, H1HR2O, 
+           H1HR2P, H1HR2Q, H1HR2R, H1HR2S, H1HR2T)
+
+hhmem$counter <- 0
+for (i in 2:21) {
+    hhmem <- hhmem %>%
+        mutate(counter = ifelse(hhmem[,i]==7, counter, counter+1))
+}
+hhsize <- data.frame(t(table(hhmem$counter))) %>%
+    select(Var2, Freq) %>%
+    rename(HHSize=Var2, Freq=Freq)
+
+kable(hhsize)
+hist(hhmem$counter)
+
+```
 
 ##
 __Number of sisters__
 
+Each time a participant listed a household member as being a sister (e.g., H1HR3A==8), I increased their count of sisters by 1.
+
+```{r}
+sisters <- ah %>%
+    select(AID, H1HR3A, H1HR3B, H1HR3C, H1HR3D, H1HR3E, 
+           H1HR3F, H1HR3G, H1HR3H, H1HR3I, H1HR3J, 
+           H1HR3K, H1HR3L, H1HR3M, H1HR3N, H1HR3O, 
+           H1HR3P, H1HR3Q, H1HR3R, H1HR3S, H1HR3T)
+sisters$counter <- 0
+for (i in 2:21) {
+    sisters <- sisters %>%
+        mutate(counter = ifelse(sisters[,i]==8, counter+1, counter))
+}
+sis <- data.frame(t(table(sisters$counter))) %>%
+    select(Var2, Freq) %>%
+    rename(Sisters=Var2, Freq=Freq)
+
+kable(sis)
+hist(sisters$counter)
+
+```
 
 ##
 __Number of brothers__
 
 
+Each time a participant listed a household member as being a brother (e.g., H1HR3A==5), I increased their count of sisters by 1.
+
+```{r}
+brothers <- ah %>%
+    select(AID, H1HR3A, H1HR3B, H1HR3C, H1HR3D, H1HR3E, 
+           H1HR3F, H1HR3G, H1HR3H, H1HR3I, H1HR3J, 
+           H1HR3K, H1HR3L, H1HR3M, H1HR3N, H1HR3O, 
+           H1HR3P, H1HR3Q, H1HR3R, H1HR3S, H1HR3T)
+brothers$counter <- 0
+for (i in 2:21) {
+    brothers <- brothers %>%
+        mutate(counter = ifelse(brothers[,i]==5, counter+1, counter))
+}
+bro <- data.frame(t(table(brothers$counter))) %>%
+    select(Var2, Freq) %>%
+    rename(Brothers=Var2, Freq=Freq)
+
+kable(bro)
+hist(brothers$counter)
+
+```
 ##
 __Total number of siblings__
 
+I added the number of brothers to the number of sisters.
+
+```{r}
+sibs <- sisters$counter + brothers$counter
+sib <- data.frame(t(table(sibs))) %>%
+    select(sibs, Freq) %>%
+    rename(Siblings=sibs, Freq=Freq)
+
+kable(sib)
+hist(sibs)
+```
 
 #
 __What proportion of students live with two biological parents? Include the analysis in your R code.__
 
+```{r}
+
+parents <- ah %>%
+    select(AID, H1HR3A, H1HR3B, H1HR3C, H1HR3D, H1HR3E, 
+           H1HR3F, H1HR3G, H1HR3H, H1HR3I, H1HR3J, 
+           H1HR3K, H1HR3L, H1HR3M, H1HR3N, H1HR3O, 
+           H1HR3P, H1HR3Q, H1HR3R, H1HR3S, H1HR3T)
+parents$biomom <- FALSE
+parents$biodad <- FALSE
+for (i in 2:21) {
+    parents <- parents %>%
+        mutate(biodad = ifelse(parents[,i]==11, TRUE, biodad)) %>%
+        mutate(biomom = ifelse(parents[,i]==14, TRUE, biomom)) %>%
+      mutate(bothparents = case_when(
+        biodad==TRUE & biomom==TRUE ~ 1,
+        biodad==FALSE | biomom==FALSE ~ 0
+      ))
+      
+}
+
+biopar <- data.frame(t(table(parents$bothparents))) %>%
+  select(Var2, Freq) %>%
+  rename(BothParents = Var2) 
+```
+
+Share living with both parents = `mean(parents$bothparents)` = `r round(mean(parents$bothparents), 2)`. 
+
 
 #
 __Calculate the number of household members that are NOT biological mother, biological father, full brother or full sister. Create a contingency table and histogram for this variable.__
+
+```{r}
+rels <- ah %>%
+    select(AID, H1HR3A, H1HR3B, H1HR3C, H1HR3D, H1HR3E, 
+           H1HR3F, H1HR3G, H1HR3H, H1HR3I, H1HR3J, 
+           H1HR3K, H1HR3L, H1HR3M, H1HR3N, H1HR3O, 
+           H1HR3P, H1HR3Q, H1HR3R, H1HR3S, H1HR3T)
+rels$numothers <- 0
+for (i in 2:21) {
+    rels <- rels %>%
+        mutate(numothers = ifelse(
+          (parents[,i] != 8 & parents[,i] != 11 &
+            parents[,i] != 5 & parents[,i] != 14 & 
+            parents[,i] != 96 & parents[,i] != 97 &
+            parents[,i] != 98), numothers+1, numothers
+        ))
+      
+}
+otherrel <- data.frame(t(table(rels$numothers))) %>%
+    select(Var2, Freq) %>%
+    rename(OtherRelatives=Var2, Freq=Freq)
+
+kable(otherrel)
+hist(rels$numothers)
+
+```
 
 ## Source code
 ```{r comment=''}
